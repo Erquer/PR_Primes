@@ -14,7 +14,7 @@ using namespace std;
 #define BLOCKHIGH(id, p,n) (BLOCKLOW((id) + 1,(p) ,(n)) -1)
 #define BLOCKSIZE(id,p,n) (BLOCKHIGH((id),(p),(n)) - BLOCKLOW((id),(p),(n)) + 1)
 
-#define MAX 200000000
+#define MAX 100000000
 
 // funkcja pomocnicza określająca czy dana liczba z zakresu <2,sqrt(n)> jest liczbą pierwszą
 bool is_primary(int n) {
@@ -23,7 +23,7 @@ bool is_primary(int n) {
 		if (n % i == 0) return false;
 	return true;
 }
-
+//funkcja, przesiewająca wszystkie liczby z tablicy, któe są wielokrotnościami el. dividers
 vector<int> sieveByDividers(int min, int max, vector<int> dividers) {
 	vector<int> toReturn;
 	int localMin = 0;
@@ -114,7 +114,7 @@ namespace Div {
 		return primary;
 	}
 
-	//trochę wolniejsza wersja naszybszej, ponieważ uzyskujemy posortowany vektor.
+	//trochę wolniejsza wersja naszybszej, ponieważ uzyskujemy posortowany vektor. Dodatkowo trzeba usunąć powtórzenia.
 	vector<int> getBetterPrimary(int min,int max) {
 		vector<int> finalPrimarys;
 		finalPrimarys.reserve(max - min + 1);
@@ -133,14 +133,13 @@ namespace Div {
 				if (is_primary(i)) privatePrimarys[omp_get_thread_num()].push_back(i);
 			}
 
-			for (int i = 0; i < th; i++) {
-				finalPrimarys.insert(finalPrimarys.end(), privatePrimarys[i].begin(), privatePrimarys[i].end());
-			}
+			
 		}
-		vector<int> finals;
-		removeDup<int>(finalPrimarys.begin(), finalPrimarys.end(), back_inserter(finals));
+		for (int i = 0; i < th; i++) {
+			finalPrimarys.insert(finalPrimarys.end(), privatePrimarys[i].begin(), privatePrimarys[i].end());
+		}
 		std::cout << "time: "<< omp_get_wtime() - start << endl;
-		return finals;
+		return finalPrimarys;
 	}
 }
 
@@ -211,8 +210,7 @@ namespace Sieve {
 
 	//Funkcyjne Podejście obliczania sita, wątki dostają całą tablicę boolowską, z któej wykreślają wilokrotności dzielników, które są w vectorze dzielniki, a te są rozdawane wątkom za pomocą 
 	// pragma omp for nowait shedule(guided)
-	//TODO: coś jest nie tak ze sprawdzaniem
-	vector<int> sitoParFunNaive(int min, int max) {
+	vector<int> sitoParFunBetter(int min, int max) {
 		vector<int> finalPrimes;
 		//finalPrimes.reserve(max - min + 1);
 		vector<int> dzielniki = Div::getSequentialPrimaryNumbers(2, int(sqrt(max)));
@@ -264,7 +262,7 @@ namespace Sieve {
 		
 	}
 
-	vector<int> sitoParFunBetter(int min, int max) {
+	vector<int> sitoParFunGood(int min, int max) {
 		vector<int> dzielniki = Div::getSequentialPrimaryNumbers(2, int(sqrt(max)));
 		vector<int> finalPrimes;
 		bool* tablica[12];
@@ -328,39 +326,39 @@ namespace Sieve {
 int main() {
 
 	std::cout << "Hello World" << endl;
-	//vector<int> primarys = Div::getBestPrimary(MAX/2, MAX);
-	//sort(primarys.begin(), primarys.end());
-	//cout << primarys.size() << endl;
-	//for (int i = 0; i < 30; i++) {
-	//	cout << primarys.at(i) << ' ';
-	//}
-	//cout << endl;
+	/*vector<int> primarys = Div::getBestPrimary(2, MAX);
+	sort(primarys.begin(), primarys.end());
+	cout << primarys.size() << endl;
+	for (int i = 0; i < 30; i++) {
+		cout << primarys.at(i) << ' ';
+	}
+	cout << endl;
 	//for (int p : primarys) cout << p << ' ';
 	//primarys.clear();
-	/*vector<int> primarys1 = Div::getBetterPrimary(MAX/2, MAX);
+	vector<int> primarys1 = Div::getBetterPrimary(2, MAX);
 	sort(primarys1.begin(), primarys1.end());
 	for (int i = 0; i < 30; i++) {
 		cout << primarys1.at(i) << ' ';
 	}
-	cout << endl << primarys1.size() << endl;*/
+	cout << endl << primarys1.size() << endl;
 	/*vector<int> prSieve = Sieve::sitoSequential(MAX / 2, MAX);
 	for (int i = 0; i < 30; i++) {
 		cout << prSieve.at(i) << ' ';
 	}
-	cout << endl << prSieve.size() << endl;*/
+	cout << endl << prSieve.size() << endl;
 
-	/*vector<int> primarys2 = Sieve::sitoParDom(MAX / 2, MAX);
+	vector<int> primarys2 = Sieve::sitoParDom(MAX / 2, MAX);
 	for (int i = 0; i < 30; i++) {
 		cout << primarys2.at(i) << ' ';
 	}
-	cout << endl << primarys2.size() << endl;
-	vector<int> primarys3 = Sieve::sitoParDomBest(MAX / 2,MAX);
+	cout << endl << primarys2.size() << endl; */
+	vector<int> primarys3 = Sieve::sitoParFunNaive(MAX/2,MAX);
 	sort(primarys3.begin(), primarys3.end());
 	for (int i = 0; i < 30; i++) {
 		cout << primarys3.at(i) << ' ';
 	}
-	cout << endl << primarys3.size() << endl;*/
-	vector<int> primarys4 = Sieve::sitoParFunNaive(2, MAX);
+	cout << endl << primarys3.size() << endl;
+	vector<int> primarys4 = Sieve::sitoParFunBetter(MAX/2, MAX);
 	sort(primarys4.begin(), primarys4.end());
 	for (int i = 0; i < 30; i++) {
 		cout << primarys4.at(i) << ' ';
