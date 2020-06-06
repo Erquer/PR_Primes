@@ -15,6 +15,7 @@ using namespace std;
 #define BLOCKSIZE(id,p,n) (BLOCKHIGH((id),(p),(n)) - BLOCKLOW((id),(p),(n)) + 1)
 
 #define MAX 100000000
+#define THREADS 4
 
 // funkcja pomocnicza określająca czy dana liczba z zakresu <2,sqrt(n)> jest liczbą pierwszą
 bool is_primary(int n) {
@@ -72,7 +73,7 @@ namespace Div {
 	vector<int> getNaivePrimary( int min, int max) {
 		vector<int> primary;
 		int th = omp_get_max_threads();
-		omp_set_num_threads(th);
+		omp_set_num_threads(THREADS);
 #pragma omp parallel
 		{
 
@@ -91,8 +92,8 @@ namespace Div {
 	vector<int> getBestPrimary( int min, int max) {
 		vector<int> primary;
 		double start, end;
-		int th = omp_get_max_threads();
-		omp_set_num_threads(th);
+		
+		omp_set_num_threads(THREADS);
 		start = omp_get_wtime();
 #pragma omp parallel
 		{
@@ -118,13 +119,13 @@ namespace Div {
 	vector<int> getBetterPrimary(int min,int max) {
 		vector<int> finalPrimarys;
 		finalPrimarys.reserve(max - min + 1);
-		int th = omp_get_max_threads();
-		vector<vector<int>> privatePrimarys(th,vector<int>());
+	
+		vector<vector<int>> privatePrimarys(THREADS,vector<int>());
 		
-		for (int i = 0; i < th; i++) {
+		for (int i = 0; i < THREADS; i++) {
 			privatePrimarys[i].reserve(max - min + 1);
 		}
-		omp_set_num_threads(th);
+		omp_set_num_threads(THREADS);
 		double start = omp_get_wtime();
 #pragma omp parallel
 		{
@@ -135,7 +136,7 @@ namespace Div {
 
 			
 		}
-		for (int i = 0; i < th; i++) {
+		for (int i = 0; i < THREADS; i++) {
 			finalPrimarys.insert(finalPrimarys.end(), privatePrimarys[i].begin(), privatePrimarys[i].end());
 		}
 		std::cout << "time: "<< omp_get_wtime() - start << endl;
@@ -143,30 +144,31 @@ namespace Div {
 	}
 }
 
+
 //Zbiór funkcji wykorzystujący metodę sita do wyznaczania liczb pierwszych.
 namespace Sieve {
 
 	//Funkcja zwracająca liczby pierwsze metodą Sita.
 	vector<int> sitoSequential(int min, int max) {
-		int zakres = int(sqrt(max));
-		bool* tablica = new bool[max + 1];
+		vector<int> zakres = Div::getSequentialPrimaryNumbers(2, int(sqrt(max)));
+		bool* tablica = new bool[max - min + 1];
+		for (int i = 0; i < max - min + 1; i++) tablica[i] = true;
 		vector<int> primes;
-		tablica[0] = 0;
-		tablica[1] = 0;
-		for (int i = 2; i <= max; i++) tablica[i] = 1;
-		int j = 0;
-		for (int i = 2; i <= zakres; i++) {
-			if (tablica[i] != 0) {
-				j = i + i;
-				while (j <= max) {
-					tablica[j] = 0;
-					j += i;
-				}
+		
+		for (int div : zakres) {
+			if (div >= min) {
+				primes.push_back(div);
 			}
+			int finalMin = (min % div) ? min + div - min % div : min;
+			for (int i = finalMin; i <= max; i += div) {
+				tablica[i - min] = false;
+			}
+
 		}
 		for (int i = min; i <= max; i++) {
-			if (tablica[i] != 0) primes.push_back(i);
+			if (tablica[i - min]) primes.push_back(i);
 		}
+	
 		//free(tablica);
 		return primes;
 	}
@@ -174,13 +176,15 @@ namespace Sieve {
 	vector<int> sitoParDom(int min, int max) {
 		
 
-		int threadBlock = (max - min + 1) / omp_get_max_threads();
+		int threadBlock = (max - min + 1) / THREADS;
 
+
+		omp_set_num_threads(THREADS);
 		vector<int> finalPrimarys;
 #pragma omp parallel reduction(merge:finalPrimarys)
 		{
 			int minBlock = min + threadBlock * omp_get_thread_num();
-			int maxBlock = (omp_get_thread_num() == omp_get_max_threads() - 1) ? max : minBlock + threadBlock - 1;
+			int maxBlock = (omp_get_thread_num() == THREADS - 1) ? max : minBlock + threadBlock - 1;
 			finalPrimarys = sitoSequential(minBlock, maxBlock);
 		}
 
@@ -192,14 +196,14 @@ namespace Sieve {
 	vector<int> sitoParDomBest(int min, int max) {
 
 		vector<int> dzielniki = Div::getBetterPrimary(2, int(sqrt(max)));
-		omp_set_num_threads(omp_get_max_threads());
+		omp_set_num_threads(THREADS);
 		vector<int> finalPrimarys;
-		int threadBlock = (max - min + 1) / omp_get_max_threads();
+		int threadBlock = (max - min + 1) / THREADS;
 		double start = omp_get_wtime();
 #pragma omp parallel reduction(merge: finalPrimarys)
 		{
 			int minBlock = min + threadBlock * omp_get_thread_num();
-			int maxBlock = (omp_get_thread_num() == omp_get_max_threads() - 1) ? max : minBlock + threadBlock - 1;
+			int maxBlock = (omp_get_thread_num() == THREADS - 1) ? max : minBlock + threadBlock - 1;
 			finalPrimarys = sieveByDividers(minBlock, maxBlock, dzielniki);
 		}
 		cout << "Time: " << omp_get_wtime() - start << endl;
@@ -215,14 +219,14 @@ namespace Sieve {
 		//finalPrimes.reserve(max - min + 1);
 		vector<int> dzielniki = Div::getSequentialPrimaryNumbers(2, int(sqrt(max)));
 		int size = max - min + 1;
-		bool* tablica[12];
-		for (int i = 0; i < 12; i++) {
+		bool* tablica[THREADS];
+		for (int i = 0; i < THREADS; i++) {
 			tablica[i] = new bool[max - min + 1];
 			for (int j = 0; j < size; j++) {
 				tablica[i][j] = true;
 			}
 		}
-		omp_set_num_threads(omp_get_max_threads());
+		omp_set_num_threads(THREADS);
 		double start = omp_get_wtime();
 #pragma omp parallel
 		{
@@ -247,7 +251,7 @@ namespace Sieve {
 		}
 		for (int i = min; i <= max; i++) {
 			bool isPrime = true;
-			for (int j = 0; j < omp_get_max_threads(); j++) {
+			for (int j = 0; j < THREADS; j++) {
 				if (!tablica[j][i - min]) {
 					isPrime = false;
 					break;
@@ -265,15 +269,15 @@ namespace Sieve {
 	vector<int> sitoParFunGood(int min, int max) {
 		vector<int> dzielniki = Div::getSequentialPrimaryNumbers(2, int(sqrt(max)));
 		vector<int> finalPrimes;
-		bool* tablica[12];
-		for (int i = 0; i < 12; i++) {
+		bool* tablica[THREADS];
+		for (int i = 0; i < THREADS; i++) {
 			tablica[i] = new bool[max - min + 1];
 			for (int j = 0; j < max - min + 1; j++) {
 				tablica[i][j] = true;
 			}
 		}
 
-		omp_set_num_threads(omp_get_max_threads());
+		omp_set_num_threads(THREADS);
 		double start = omp_get_wtime();
 #pragma omp parallel
 		{
@@ -297,7 +301,7 @@ namespace Sieve {
 		}
 		for (int i = min; i <= max; i++) {
 			bool isPrime = true;
-			for (int j = 0; j < omp_get_max_threads(); j++) {
+			for (int j = 0; j < THREADS; j++) {
 				if (!tablica[j][i - min]) {
 					isPrime = false;
 					break;
@@ -341,7 +345,7 @@ int main() {
 		cout << primarys1.at(i) << ' ';
 	}
 	cout << endl << primarys1.size() << endl;
-	/*vector<int> prSieve = Sieve::sitoSequential(MAX / 2, MAX);
+	vector<int> prSieve = Sieve::sitoSequential(MAX / 2, MAX);
 	for (int i = 0; i < 30; i++) {
 		cout << prSieve.at(i) << ' ';
 	}
@@ -351,8 +355,8 @@ int main() {
 	for (int i = 0; i < 30; i++) {
 		cout << primarys2.at(i) << ' ';
 	}
-	cout << endl << primarys2.size() << endl; */
-	vector<int> primarys3 = Sieve::sitoParFunNaive(MAX/2,MAX);
+	cout << endl << primarys2.size() << endl; 
+	vector<int> primarys3 = Sieve::sitoParFunGood(MAX/2,MAX);
 	sort(primarys3.begin(), primarys3.end());
 	for (int i = 0; i < 30; i++) {
 		cout << primarys3.at(i) << ' ';
@@ -363,7 +367,11 @@ int main() {
 	for (int i = 0; i < 30; i++) {
 		cout << primarys4.at(i) << ' ';
 	}
-	cout << endl << primarys4.size() << endl;
-
+	cout << endl << primarys4.size() << endl;*/
+	vector<int> prSieve = Sieve::sitoSequential(2, MAX/2);
+	for (int i = 0; i < 30; i++) {
+		cout << prSieve.at(i) << ' ';
+	}
+	cout << endl << prSieve.size() << endl;
 	return 0;
 }
